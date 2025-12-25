@@ -19,6 +19,7 @@ function App() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -40,21 +41,18 @@ function App() {
       });
   }, []);
 
-  // 1. Calculate Ranks for EVERYONE first (Dense Ranking)
-  const allRankedParticipants = useMemo<RankedParticipant[]>(() => {
+  // 1. Calculate Global Ranks for EVERYONE first (Dense Ranking)
+  const globalRankedParticipants = useMemo<RankedParticipant[]>(() => {
     if (participants.length === 0) return [];
 
-    // Create a copy and sort
+    // Sort all participants by score
     const sorted = [...participants].sort((a, b) => b.score - a.score);
 
     let currentRank = 1;
     let lastScore = sorted[0]?.score;
 
     return sorted.map((p, index) => {
-      // If score is different from previous, increment rank by 1 (dense ranking)
-      // Note: Standard competition ranking would be index + 1
-      // User requested: "if two people share the same score, they should be in the same place. no need to eliminate the next immediate place"
-      // This implies 100, 100, 90 -> 1st, 1st, 2nd
+      // Dense ranking: same score = same rank, next different score = next rank
       if (index > 0 && p.score < lastScore) {
         currentRank++;
         lastScore = p.score;
@@ -63,7 +61,23 @@ function App() {
     });
   }, [participants]);
 
-  // 2. Paginate the ranked list
+  // 2. Filter by search query while preserving global ranks
+  const allRankedParticipants = useMemo<RankedParticipant[]>(() => {
+    if (searchQuery.trim() === '') {
+      return globalRankedParticipants;
+    }
+
+    return globalRankedParticipants.filter(p =>
+      p.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [globalRankedParticipants, searchQuery]);
+
+  // Reset to page 1 when search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  // 3. Paginate the filtered list (with global ranks preserved)
   const totalPages = Math.ceil(allRankedParticipants.length / itemsPerPage);
   const currentParticipants = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -89,6 +103,15 @@ function App() {
       <header className="header">
         <h1 className="title">RUN FOR THEIR<br /><span>LIVES</span></h1>
         <div className="subtitle">LEADERBOARD</div>
+        <div className="search-container">
+          <input
+            type="text"
+            className="search-input"
+            placeholder="🔍 Search by name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
       </header>
 
       <main className="leaderboard-list">
@@ -115,7 +138,11 @@ function App() {
       )}
 
       <footer className="footer">
-        Showing {currentParticipants.length} of {participants.length} Participants
+        {searchQuery ? (
+          <>Found {allRankedParticipants.length} of {participants.length} Participants</>
+        ) : (
+          <>Showing {currentParticipants.length} of {participants.length} Participants</>
+        )}
       </footer>
     </div>
   );
